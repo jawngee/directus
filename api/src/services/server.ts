@@ -17,6 +17,7 @@ import { Accountability } from '@directus/shared/types';
 import { toArray } from '@directus/shared/utils';
 import getMailer from '../mailer';
 import { SettingsService } from './settings';
+import getImageEditorSettings from '../utils/get-image-editor-settings';
 
 export class ServerService {
 	knex: Knex;
@@ -47,6 +48,7 @@ export class ServerService {
 		});
 
 		info.project = projectInfo;
+		info.imageEditorSettings = getImageEditorSettings();
 
 		if (this.accountability?.admin === true) {
 			const osType = os.type() === 'Darwin' ? 'macOS' : os.type();

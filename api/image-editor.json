@@ -1,0 +1,37 @@
+{
+  "cropper": {
+	"view_mode": 1,
+	"aspect_ratios": [
+	  {
+		"title": "16:9",
+		"aspect_ratio": [16, 9],
+		"icon": "crop_16_9"
+	  },
+	  {
+		"title": "9:16",
+		"aspect_ratio": [9, 16],
+		"icon": "crop_16_9"
+	  },
+	  {
+		"title": "4:3 (Hot Stuff)",
+		"aspect_ratio": [4, 3],
+		"icon": "crop_free"
+	  },
+	  {
+		"title": "2:3 (Hot Stuff)",
+		"aspect_ratio": [2, 3],
+		"icon": "crop_free"
+	  },
+	  {
+		"title": "1:1",
+		"aspect_ratio": [1, 1],
+		"icon": "crop_square"
+	  },
+	  {
+		"title": "45:16 (Profile Poster)",
+		"aspect_ratio": [45, 16],
+		"icon": "crop_free"
+	  }
+	]
+  }
+}

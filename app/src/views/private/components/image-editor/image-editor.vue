@@ -52,25 +52,15 @@
 					</template>
 
 					<v-list>
-						<v-list-item clickable :active="aspectRatio === 16 / 9" @click="aspectRatio = 16 / 9">
-							<v-list-item-icon><v-icon name="crop_16_9" /></v-list-item-icon>
-							<v-list-item-content>16:9</v-list-item-content>
-						</v-list-item>
-						<v-list-item clickable :active="aspectRatio === 3 / 2" @click="aspectRatio = 3 / 2">
-							<v-list-item-icon><v-icon name="crop_3_2" /></v-list-item-icon>
-							<v-list-item-content>3:2</v-list-item-content>
-						</v-list-item>
-						<v-list-item clickable :active="aspectRatio === 5 / 4" @click="aspectRatio = 5 / 4">
-							<v-list-item-icon><v-icon name="crop_5_4" /></v-list-item-icon>
-							<v-list-item-content>5:4</v-list-item-content>
-						</v-list-item>
-						<v-list-item clickable :active="aspectRatio === 7 / 5" @click="aspectRatio = 7 / 5">
-							<v-list-item-icon><v-icon name="crop_7_5" /></v-list-item-icon>
-							<v-list-item-content>7:5</v-list-item-content>
-						</v-list-item>
-						<v-list-item clickable :active="aspectRatio === 1 / 1" @click="aspectRatio = 1 / 1">
-							<v-list-item-icon><v-icon name="crop_square" /></v-list-item-icon>
-							<v-list-item-content>{{ t('square') }}</v-list-item-content>
+						<v-list-item
+							v-for="aspectRatioSetting in imageEditorSettings.cropper.aspect_ratios"
+							:key="aspectRatioSetting.title"
+							clickable
+							:active="aspectRatio === aspectRatioSetting.ratio"
+							@click="aspectRatio = aspectRatioSetting.ratio"
+						>
+							<v-list-item-icon><v-icon :name="aspectRatioSetting.icon" /></v-list-item-icon>
+							<v-list-item-content>{{ aspectRatioSetting.title }}</v-list-item-content>
 						</v-list-item>
 						<v-list-item clickable :active="aspectRatio === NaN" @click="aspectRatio = NaN">
 							<v-list-item-icon><v-icon name="crop_free" /></v-list-item-icon>
@@ -89,6 +79,10 @@
 				</v-menu>
 
 				<div class="spacer" />
+
+				<v-switch v-show="cropping" v-model="newImage" :label="t('new_image')"></v-switch>
+
+				<div v-show="cropping" class="spacer" />
 
 				<div v-if="imageData" class="dimensions">
 					{{ n(imageData.width) }}x{{ n(imageData.height) }}
@@ -117,15 +111,21 @@ import { useI18n } from 'vue-i18n';
 import { defineComponent, ref, watch, computed, reactive, nextTick } from 'vue';
 import api from '@/api';
 
+import VSwitch from '@/components/v-switch/v-switch.vue';
 import Cropper from 'cropperjs';
+import { router } from '@/router';
 import { nanoid } from 'nanoid';
 import throttle from 'lodash/throttle';
 import { unexpectedError } from '@/utils/unexpected-error';
 import { addTokenToURL } from '@/api';
 import { getRootPath } from '@/utils/get-root-path';
+import { useServerStore } from '@/stores';
+import { AxiosResponse } from 'axios';
 
 type Image = {
 	type: string;
+	title: string;
+	folder: string;
 	filesize: number;
 	filename_download: string;
 	width: number;
@@ -133,6 +133,7 @@ type Image = {
 };
 
 export default defineComponent({
+	components: { VSwitch },
 	props: {
 		id: {
 			type: String,
@@ -173,6 +174,10 @@ export default defineComponent({
 			cropping,
 		} = useCropper();
 
+		const newImage = ref<boolean>(true);
+
+		const { imageEditorSettings } = useServerStore().$state.info;
+
 		watch(internalActive, (isActive) => {
 			if (isActive === true) {
 				fetchImage();
@@ -204,12 +209,14 @@ export default defineComponent({
 			flip,
 			rotate,
 			aspectRatio,
+			newImage,
 			aspectRatioIcon,
 			saving,
 			imageURL,
 			newDimensions,
 			dragMode,
 			cropping,
+			imageEditorSettings,
 		};
 
 		function useImage() {
@@ -237,7 +244,7 @@ export default defineComponent({
 
 					const response = await api.get(`/files/${props.id}`, {
 						params: {
-							fields: ['type', 'filesize', 'filename_download', 'width', 'height'],
+							fields: ['type', 'title', 'filesize', 'filename_download', 'width', 'height', 'folder'],
 						},
 					});
 
@@ -263,11 +270,31 @@ export default defineComponent({
 						}
 
 						const formData = new FormData();
-						formData.append('file', blob, imageData.value?.filename_download);
+						if (newImage.value) {
+							const match = imageData.value?.filename_download.match(/\.[^/.]+$/);
+							const fileExt = match ? match[0] : null;
+							const filenameBase = fileExt
+								? imageData.value?.filename_download.replace(fileExt, '')
+								: imageData.value?.filename_download;
+
+							formData.append('title', imageData.value?.title + ' - Cropped');
+							if (imageData.value?.folder) {
+								formData.append('folder', imageData.value?.folder);
+							}
+							formData.append('file', blob, filenameBase + `-${newDimensions.width}x${newDimensions.height}${fileExt}`);
+						} else {
+							formData.append('file', blob, imageData.value?.filename_download);
+						}
 
 						try {
-							await api.patch(`/files/${props.id}`, formData);
-							emit('refresh');
+							if (newImage.value) {
+								let response: AxiosResponse = await api.post(`files/`, formData);
+								router.push(`/files/${response.data.data.id}`);
+							} else {
+								await api.patch(`/files/${props.id}`, formData);
+								emit('refresh');
+							}
+
 							internalActive.value = false;
 						} catch (err: any) {
 							unexpectedError(err);
@@ -380,6 +407,8 @@ export default defineComponent({
 					autoCrop: false,
 					toggleDragModeOnDblclick: false,
 					dragMode: 'move',
+					viewMode: imageEditorSettings.cropper.view_mode,
+					zoomOnWheel: false,
 					crop: throttle((event) => {
 						if (!imageData.value) return;
 
@@ -521,5 +550,10 @@ export default defineComponent({
 .cancel {
 	padding-right: 16px;
 	padding-left: 16px;
+}
+</style>
+<style>
+.cropper-modal {
+	opacity: 0.8 !important;
 }
 </style>
